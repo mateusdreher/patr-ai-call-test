@@ -34,6 +34,7 @@ Se `GEMINI_API_KEY` estiver vazio, o sistema usa segmentação mockada automatic
 
 - `GET /health`
 - `POST /webhooks/recall`
+- `GET /demo/recall-sample` (gera payload + headers assinados + curl pronto)
 - `POST /uploads/presencial/signed-url`
 - `POST /uploads/presencial/complete`
 - `POST /demo/run` (atalho para gerar reunião mockada)
@@ -67,18 +68,66 @@ No JSON final você verá cada tópico com:
 
 Secret padrão: `demo-secret` (`RECALL_WEBHOOK_SECRET`).
 
-Exemplo de payload:
+Exemplo de payload realista (estilo Recall webhook):
 
 ```json
 {
-  "meeting_id": "mtg-recall-001",
-  "mp4_url": "https://recall.example/video.mp4",
-  "transcript_url": "https://recall.example/transcript.json",
-  "duration_seconds": 3600
+  "event": "recording.done",
+  "data": {
+    "bot": {
+      "id": "bot_123",
+      "metadata": { "meeting_id": "mtg-recall-001" }
+    },
+    "recording": { "id": "rec_123", "duration": 3600 },
+    "media_shortcuts": {
+      "video_mixed": { "data": { "download_url": "https://recall.example/video.mp4" } },
+      "transcript": { "data": { "download_url": "https://recall.example/transcript.json" } }
+    }
+  }
 }
 ```
 
-O header esperado é `X-Recall-Signature` com HMAC-SHA256 em hex do body.
+Headers esperados (estilo Svix):
+- `webhook-id`
+- `webhook-timestamp`
+- `webhook-signature` no formato `v1,<base64_hmac_sha256>`
+
+Obs.: o código mantém fallback legado com `X-Recall-Signature` para compatibilidade com demos antigas.
+
+### Endpoint utilitário para webhook Recall
+
+Use:
+
+```bash
+curl http://localhost:8080/demo/recall-sample
+```
+
+A resposta traz:
+- payload realista do webhook;
+- headers assinados no padrão Svix;
+- comando `curl` pronto para enviar no `/webhooks/recall`.
+
+Exemplo direto (1-linha):
+
+```bash
+curl -s http://localhost:8080/demo/recall-sample | jq -r '.curl' | sh
+```
+
+Depois consulte:
+
+```bash
+curl http://localhost:8080/meetings/<meeting_id>
+```
+
+## Mock Azure (Fast Transcription)
+
+O mock presencial usa estrutura inspirada em `recognizedPhrases` do Fast Transcription:
+- `speaker`
+- `offsetMilliseconds`
+- `durationMilliseconds`
+- `nBest[0].display`
+
+Esses campos são normalizados para o formato interno unificado (`start_sec`, `end_sec`, `speaker`, `text`).
 
 ## TODOs para produção (já marcados no código)
 

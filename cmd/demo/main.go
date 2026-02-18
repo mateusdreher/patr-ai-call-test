@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -104,11 +106,70 @@ type MeetingEvent struct {
 	MeetingID string
 }
 
-type RecallWebhookEvent struct {
+// PARTE 1 (RECALL): formato simplificado legado mantido para fallback de compatibilidade.
+type legacyRecallWebhookEvent struct {
 	MeetingID       string `json:"meeting_id"`
 	MP4URL          string `json:"mp4_url"`
 	TranscriptURL   string `json:"transcript_url"`
 	DurationSeconds int    `json:"duration_seconds"`
+}
+
+// PARTE 1 (RECALL): envelope mockado no estilo webhook oficial (event + data + media_shortcuts).
+type recallWebhookEnvelope struct {
+	Event string `json:"event"`
+	Data  struct {
+		Bot struct {
+			ID       string `json:"id"`
+			Metadata struct {
+				MeetingID string `json:"meeting_id"`
+			} `json:"metadata"`
+		} `json:"bot"`
+		Recording struct {
+			ID       string  `json:"id"`
+			Duration float64 `json:"duration"`
+		} `json:"recording"`
+		MediaShortcuts struct {
+			Video struct {
+				Data struct {
+					DownloadURL string `json:"download_url"`
+				} `json:"data"`
+			} `json:"video_mixed"`
+			Transcript struct {
+				Data struct {
+					DownloadURL string `json:"download_url"`
+				} `json:"data"`
+			} `json:"transcript"`
+		} `json:"media_shortcuts"`
+	} `json:"data"`
+}
+
+type normalizedRecallIngestion struct {
+	MeetingID       string
+	MP4URL          string
+	TranscriptURL   string
+	DurationSeconds int
+}
+
+// PARTE 3 (NORMALIZAÇÃO): estrutura mock do transcript da Recall no formato "utterances".
+type recallTranscriptResponse struct {
+	Utterances []struct {
+		StartSec float64 `json:"start"`
+		EndSec   float64 `json:"end"`
+		Speaker  string  `json:"speaker"`
+		Text     string  `json:"text"`
+	} `json:"utterances"`
+}
+
+// PARTE 2 (AZURE): estrutura mock baseada no Fast Transcription.
+type azureFastTranscription struct {
+	RecognizedPhrases []struct {
+		Speaker              int   `json:"speaker"`
+		OffsetMilliseconds   int64 `json:"offsetMilliseconds"`
+		DurationMilliseconds int64 `json:"durationMilliseconds"`
+		NBest                []struct {
+			Display string `json:"display"`
+		} `json:"nBest"`
+	} `json:"recognizedPhrases"`
 }
 
 type SignedURLRequest struct {
@@ -130,6 +191,15 @@ type UploadCompleteRequest struct {
 
 type DemoRunRequest struct {
 	Source string `json:"source"`
+}
+
+type RecallSampleResponse struct {
+	Endpoint string            `json:"endpoint"`
+	Method   string            `json:"method"`
+	Headers  map[string]string `json:"headers"`
+	Payload  map[string]any    `json:"payload"`
+	Curl     string            `json:"curl"`
+	Notes    []string          `json:"notes"`
 }
 
 type Store struct {
@@ -196,21 +266,64 @@ type geminiAPIClient struct {
 }
 
 func (m *mockRecallClient) FetchTranscript(_ context.Context, meeting *Meeting) ([]Utterance, error) {
-	// TODO(prod): baixar transcript oficial da Recall.ai (com auth) e mapear para o formato unificado.
-	return []Utterance{
-		{StartSec: 0, EndSec: 24, Speaker: "Mateus", Text: "Bom dia, vamos começar com o contexto do deal."},
-		{StartSec: 25, EndSec: 88, Speaker: "Ana", Text: "Trouxe os indicadores de receita e burn rate do trimestre."},
-		{StartSec: 89, EndSec: 155, Speaker: "Mateus", Text: "Vamos discutir valuation, riscos e próximos passos."},
-	}, nil
+	// PARTE 1 (RECALL): mock bruto no estilo retorno de transcript por utterances.
+	// TODO(prod): baixar transcript oficial da Recall.ai (com auth) usando meeting.TranscriptURL.
+	raw := recallTranscriptResponse{
+		Utterances: []struct {
+			StartSec float64 `json:"start"`
+			EndSec   float64 `json:"end"`
+			Speaker  string  `json:"speaker"`
+			Text     string  `json:"text"`
+		}{
+			{StartSec: 0, EndSec: 24, Speaker: "Mateus", Text: "Bom dia, vamos começar com o contexto do deal."},
+			{StartSec: 25, EndSec: 88, Speaker: "Ana", Text: "Trouxe os indicadores de receita e burn rate do trimestre."},
+			{StartSec: 89, EndSec: 155, Speaker: "Mateus", Text: "Vamos discutir valuation, riscos e próximos passos."},
+		},
+	}
+	// PARTE 3 (NORMALIZAÇÃO): converte schema Recall -> transcript unificado.
+	return normalizeRecallTranscript(raw), nil
 }
 
 func (m *mockAzureClient) TranscribeWithSpeakerID(_ context.Context, meeting *Meeting) ([]Utterance, error) {
-	// TODO(prod): enviar áudio para Azure Speech com Voice Profiles e tratar webhooks/resultados assíncronos.
-	return []Utterance{
-		{StartSec: 0, EndSec: 30, Speaker: "Speaker-01", Text: "Fechando a porta da sala, iniciando discussão sobre pipeline comercial."},
-		{StartSec: 31, EndSec: 90, Speaker: "Speaker-02", Text: "No presencial vimos resistência no preço e objeções técnicas."},
-		{StartSec: 91, EndSec: 170, Speaker: "Speaker-01", Text: "Vamos consolidar plano de ação e responsáveis por follow up."},
-	}, nil
+	// PARTE 2 (AZURE): mock bruto inspirado no resultado de Fast Transcription.
+	// TODO(prod): chamar API/SDK Azure Speech e usar payload real retornado (async ou batch).
+	raw := azureFastTranscription{
+		RecognizedPhrases: []struct {
+			Speaker              int   `json:"speaker"`
+			OffsetMilliseconds   int64 `json:"offsetMilliseconds"`
+			DurationMilliseconds int64 `json:"durationMilliseconds"`
+			NBest                []struct {
+				Display string `json:"display"`
+			} `json:"nBest"`
+		}{
+			{
+				Speaker:              1,
+				OffsetMilliseconds:   0,
+				DurationMilliseconds: 30000,
+				NBest: []struct {
+					Display string `json:"display"`
+				}{{Display: "Fechando a porta da sala, iniciando discussão sobre pipeline comercial."}},
+			},
+			{
+				Speaker:              2,
+				OffsetMilliseconds:   31000,
+				DurationMilliseconds: 59000,
+				NBest: []struct {
+					Display string `json:"display"`
+				}{{Display: "No presencial vimos resistência no preço e objeções técnicas."}},
+			},
+			{
+				Speaker:              1,
+				OffsetMilliseconds:   91000,
+				DurationMilliseconds: 79000,
+				NBest: []struct {
+					Display string `json:"display"`
+				}{{Display: "Vamos consolidar plano de ação e responsáveis por follow up."}},
+			},
+		},
+	}
+	// PARTE 3 (NORMALIZAÇÃO): converte schema Azure -> transcript unificado.
+	return normalizeAzureFastTranscript(raw), nil
 }
 
 func (m *mockVertexClient) SegmentTopics(_ context.Context, transcript []Utterance) ([]TopicSegment, error) {
@@ -374,6 +487,7 @@ func envOrDefault(k, d string) string {
 func (a *App) routes() {
 	http.HandleFunc("/health", a.healthHandler)
 	http.HandleFunc("/webhooks/recall", a.recallWebhookHandler)
+	http.HandleFunc("/demo/recall-sample", a.recallSampleHandler)
 	http.HandleFunc("/uploads/presencial/signed-url", a.presencialSignedURLHandler)
 	http.HandleFunc("/uploads/presencial/complete", a.presencialUploadCompleteHandler)
 	http.HandleFunc("/demo/run", a.demoRunHandler)
@@ -399,14 +513,16 @@ func (a *App) recallWebhookHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed reading body", http.StatusBadRequest)
 		return
 	}
-	signature := r.Header.Get("X-Recall-Signature")
-	if !verifyHMACSHA256(body, signature, a.cfg.RecallWebhookSecret) {
+	// PARTE 1 (RECALL): valida assinatura estilo Svix dos webhooks oficiais.
+	// Headers esperados: webhook-id, webhook-timestamp, webhook-signature (v1,<base64>).
+	if !verifyRecallWebhookSignature(body, r.Header, a.cfg.RecallWebhookSecret) {
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
 		return
 	}
-	var evt RecallWebhookEvent
-	if err := json.Unmarshal(body, &evt); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	// PARTE 3 (NORMALIZAÇÃO): parseia payload realista da Recall para o contrato interno.
+	evt, err := parseRecallWebhookEvent(body)
+	if err != nil {
+		http.Error(w, "invalid recall webhook payload", http.StatusBadRequest)
 		return
 	}
 	if evt.MeetingID == "" {
@@ -560,6 +676,77 @@ func (a *App) demoRunHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (a *App) recallSampleHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	meetingID := r.URL.Query().Get("meeting_id")
+	if strings.TrimSpace(meetingID) == "" {
+		meetingID = generateMeetingID()
+	}
+	durationSec := 3600
+	payload := map[string]any{
+		"event": "recording.done",
+		"data": map[string]any{
+			"bot": map[string]any{
+				"id": "bot_demo_123",
+				"metadata": map[string]any{
+					"meeting_id": meetingID,
+				},
+			},
+			"recording": map[string]any{
+				"id":       "rec_demo_123",
+				"duration": durationSec,
+			},
+			"media_shortcuts": map[string]any{
+				"video_mixed": map[string]any{
+					"data": map[string]any{
+						"download_url": "https://recall.example/video.mp4",
+					},
+				},
+				"transcript": map[string]any{
+					"data": map[string]any{
+						"download_url": "https://recall.example/transcript.json",
+					},
+				},
+			},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		http.Error(w, "failed to build payload", http.StatusInternalServerError)
+		return
+	}
+	id, ts, sig := buildRecallSvixHeaders(body, a.cfg.RecallWebhookSecret)
+
+	endpoint := fmt.Sprintf("%s/webhooks/recall", a.cfg.PublicBaseURL)
+	escapedBody := strings.ReplaceAll(string(body), `'`, `'\''`)
+	curl := fmt.Sprintf(
+		"curl -X POST %s -H 'Content-Type: application/json' -H 'webhook-id: %s' -H 'webhook-timestamp: %s' -H 'webhook-signature: %s' -d '%s'",
+		endpoint, id, ts, sig, escapedBody,
+	)
+
+	resp := RecallSampleResponse{
+		Endpoint: endpoint,
+		Method:   "POST",
+		Headers: map[string]string{
+			"Content-Type":      "application/json",
+			"webhook-id":        id,
+			"webhook-timestamp": ts,
+			"webhook-signature": sig,
+		},
+		Payload: payload,
+		Curl:    curl,
+		Notes: []string{
+			"Endpoint utilitario para demo local; nao usar em producao.",
+			"Assinatura segue o padrao v1,<base64_hmac_sha256> sobre id.timestamp.body.",
+		},
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (a *App) getMeetingHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -661,14 +848,142 @@ func (a *App) processMeeting(ctx context.Context, meetingID string) error {
 	return nil
 }
 
-func verifyHMACSHA256(body []byte, incomingSignature, secret string) bool {
-	if incomingSignature == "" || secret == "" {
+// PARTE 1 (RECALL): assinatura no padrão Svix.
+// payload assinado: "<webhook-id>.<webhook-timestamp>.<raw-body>"
+// header signature esperado: "v1,<base64-hmac-sha256>"
+func verifyRecallWebhookSignature(body []byte, headers http.Header, secret string) bool {
+	if secret == "" {
 		return false
 	}
+	webhookID := headers.Get("webhook-id")
+	webhookTS := headers.Get("webhook-timestamp")
+	webhookSig := headers.Get("webhook-signature")
+
+	// Compatibilidade com demos antigas.
+	if webhookID == "" || webhookTS == "" || webhookSig == "" {
+		legacy := headers.Get("X-Recall-Signature")
+		if legacy == "" {
+			return false
+		}
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write(body)
+		expectedHex := hex.EncodeToString(mac.Sum(nil))
+		return hmac.Equal([]byte(expectedHex), []byte(strings.TrimSpace(legacy)))
+	}
+
+	toSign := webhookID + "." + webhookTS + "." + string(body)
 	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	expected := hex.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(expected), []byte(strings.TrimSpace(incomingSignature)))
+	mac.Write([]byte(toSign))
+	expectedB64 := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+
+	for _, candidate := range strings.FieldsFunc(webhookSig, func(r rune) bool { return r == ' ' || r == ',' }) {
+		if strings.HasPrefix(candidate, "v1") {
+			continue
+		}
+		if hmac.Equal([]byte(candidate), []byte(expectedB64)) {
+			return true
+		}
+	}
+	return false
+}
+
+func buildRecallSvixHeaders(body []byte, secret string) (webhookID, webhookTS, webhookSignature string) {
+	webhookID = "msg_" + generateMeetingID()
+	webhookTS = strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	toSign := webhookID + "." + webhookTS + "." + string(body)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(toSign))
+	webhookSignature = "v1," + base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	return webhookID, webhookTS, webhookSignature
+}
+
+// PARTE 3 (NORMALIZAÇÃO): parse do webhook Recall (realista) + fallback legado.
+func parseRecallWebhookEvent(body []byte) (normalizedRecallIngestion, error) {
+	var env recallWebhookEnvelope
+	if err := json.Unmarshal(body, &env); err == nil && env.Event != "" {
+		out := normalizedRecallIngestion{
+			MeetingID:       firstNonEmpty(env.Data.Bot.Metadata.MeetingID, env.Data.Bot.ID, env.Data.Recording.ID),
+			MP4URL:          env.Data.MediaShortcuts.Video.Data.DownloadURL,
+			TranscriptURL:   env.Data.MediaShortcuts.Transcript.Data.DownloadURL,
+			DurationSeconds: int(env.Data.Recording.Duration),
+		}
+		if out.MeetingID == "" {
+			return normalizedRecallIngestion{}, errors.New("missing meeting id in recall payload")
+		}
+		if out.MP4URL == "" {
+			return normalizedRecallIngestion{}, errors.New("missing mp4 download url in recall payload")
+		}
+		return out, nil
+	}
+
+	var legacy legacyRecallWebhookEvent
+	if err := json.Unmarshal(body, &legacy); err != nil {
+		return normalizedRecallIngestion{}, err
+	}
+	if legacy.MeetingID == "" && legacy.MP4URL == "" {
+		return normalizedRecallIngestion{}, errors.New("unknown recall payload format")
+	}
+	return normalizedRecallIngestion{
+		MeetingID:       legacy.MeetingID,
+		MP4URL:          legacy.MP4URL,
+		TranscriptURL:   legacy.TranscriptURL,
+		DurationSeconds: legacy.DurationSeconds,
+	}, nil
+}
+
+// PARTE 3 (NORMALIZAÇÃO): Recall utterances -> transcript unificado.
+func normalizeRecallTranscript(raw recallTranscriptResponse) []Utterance {
+	out := make([]Utterance, 0, len(raw.Utterances))
+	for _, u := range raw.Utterances {
+		start := int(u.StartSec)
+		end := int(u.EndSec)
+		if end < start {
+			end = start
+		}
+		speaker := u.Speaker
+		if strings.TrimSpace(speaker) == "" {
+			speaker = "Unknown"
+		}
+		out = append(out, Utterance{
+			StartSec: start,
+			EndSec:   end,
+			Speaker:  speaker,
+			Text:     strings.TrimSpace(u.Text),
+		})
+	}
+	return out
+}
+
+// PARTE 3 (NORMALIZAÇÃO): Azure Fast Transcription -> transcript unificado.
+func normalizeAzureFastTranscript(raw azureFastTranscription) []Utterance {
+	out := make([]Utterance, 0, len(raw.RecognizedPhrases))
+	for _, p := range raw.RecognizedPhrases {
+		start := int(p.OffsetMilliseconds / 1000)
+		end := int((p.OffsetMilliseconds + p.DurationMilliseconds) / 1000)
+		if end < start {
+			end = start
+		}
+		text := ""
+		if len(p.NBest) > 0 {
+			text = strings.TrimSpace(p.NBest[0].Display)
+		}
+		out = append(out, Utterance{
+			StartSec: start,
+			EndSec:   end,
+			Speaker:  fmt.Sprintf("Speaker-%02d", p.Speaker),
+			Text:     text,
+		})
+	}
+	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func generateMeetingID() string {
