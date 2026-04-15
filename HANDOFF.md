@@ -1,132 +1,72 @@
-# Handoff - AI Call PoC (Go)
+# Handoff - Recall Review PoC
 
-Este documento resume o contexto desta sessão para continuidade em outro PC.
+## Estado atual
 
-## Objetivo do projeto
+O projeto agora tem duas frentes no mesmo servidor:
 
-PoC em Go para pipeline de reuniões de investimento:
-- ingestão (Recall webhook + upload presencial),
-- transcrição,
-- segmentação em tópicos,
-- vínculo tópico com vídeo (clip + frame),
-- entrega para serviço de análise de deals.
+1. Pipeline original de reunioes (`/webhooks/recall`, `/demo/run`, `/meetings/{id}`).
+2. Camada de review da Recall API (`/api/review/recall/*`) + UI em `/review/`.
 
-## Estado atual (implementado)
+## O que foi adicionado
 
-### 1) Ingestão
-- `POST /webhooks/recall`
-  - valida assinatura de webhook.
-  - parseia payload Recall em formato realista (event/data/media_shortcuts).
-  - normaliza e enfileira reunião para processamento.
-- `POST /uploads/presencial/signed-url`
-  - gera signed-url mock para upload direto.
-- `POST /uploads/presencial/complete`
-  - confirma upload presencial e enfileira processamento.
+- Novo servico em [cmd/demo/recall_review.go](/home/mateusdreher/.projects/zappts/patr-ai-call-test/cmd/demo/recall_review.go)
+- Novas rotas registradas em [cmd/demo/main.go](/home/mateusdreher/.projects/zappts/patr-ai-call-test/cmd/demo/main.go)
+- UI estatica em:
+  - [web/index.html](/home/mateusdreher/.projects/zappts/patr-ai-call-test/web/index.html)
+  - [web/styles.css](/home/mateusdreher/.projects/zappts/patr-ai-call-test/web/styles.css)
+  - [web/app.js](/home/mateusdreher/.projects/zappts/patr-ai-call-test/web/app.js)
+- Testes adicionais em [cmd/demo/main_test.go](/home/mateusdreher/.projects/zappts/patr-ai-call-test/cmd/demo/main_test.go)
 
-### 2) Processamento assíncrono
-- Worker interno em memória (`chan`) simulando Pub/Sub.
-- Pipeline:
-  1. transcript (Recall mock ou Azure mock),
-  2. tópicos (Gemini real se configurado, senão mock),
-  3. assets de mídia (clip + frame mock),
-  4. payload final e entrega mock.
+## Endpoints novos relevantes
 
-### 3) Topic Engine
-- Integração real com Gemini via API key:
-  - `GEMINI_API_KEY`
-  - `GEMINI_MODEL` (default: `gemini-1.5-pro`)
-- Fallback automático para mock se não houver chave.
+- `GET /api/review/recall/catalog`
+- `GET /api/review/recall/state`
+- `POST /api/review/recall/reset`
+- `POST /api/review/recall/bootstrap`
+- `GET /api/review/recall/webhooks/samples`
+- `GET|POST /api/review/recall/bots`
+- `GET|PATCH|DELETE /api/review/recall/bots/{bot_id}`
+- `POST /api/review/recall/bots/{bot_id}/start_recording`
+- `POST /api/review/recall/bots/{bot_id}/pause_recording`
+- `POST /api/review/recall/bots/{bot_id}/resume_recording`
+- `POST /api/review/recall/bots/{bot_id}/stop_recording`
+- `POST /api/review/recall/bots/{bot_id}/leave`
+- `POST|DELETE /api/review/recall/bots/{bot_id}/output_media`
+- `GET /api/review/recall/recordings`
+- `GET|DELETE /api/review/recall/recordings/{recording_id}`
+- `GET /api/review/recall/transcripts/{id}`
+- `GET /api/review/recall/video_mixed/{id}`
+- `GET /api/review/recall/audio_mixed/{id}`
+- `GET /api/review/recall/meeting_metadata/{id}`
+- `GET /api/review/recall/participant_events/{id}`
+- `GET|POST /api/review/recall/calendar/meetings`
+- `GET|PUT /api/review/recall/calendar/meetings/{meeting_id}`
+- `POST /api/review/recall/calendar/meetings/refresh`
 
-### 4) Recall realista + assinatura
-- Suporte a assinatura estilo Svix:
-  - `webhook-id`
-  - `webhook-timestamp`
-  - `webhook-signature` (`v1,<base64_hmac_sha256>`)
-- Fallback legado:
-  - `X-Recall-Signature` em hex.
-- Endpoint utilitário:
-  - `GET /demo/recall-sample`
-  - retorna payload + headers + `curl` pronto.
-
-### 5) Azure realista (mock)
-- Mock no estilo Fast Transcription (`recognizedPhrases`):
-  - `speaker`
-  - `offsetMilliseconds`
-  - `durationMilliseconds`
-  - `nBest[0].display`
-- Conversão para transcript unificado (`start_sec`, `end_sec`, `speaker`, `text`).
-
-## Arquivos principais
-
-- `cmd/demo/main.go`
-  - servidor, rotas, worker, mocks, normalização e integração Gemini.
-- `cmd/demo/main_test.go`
-  - testes de assinatura, parse Recall, normalização Azure e pipeline.
-- `README.md`
-  - instruções de uso e fluxo de demo.
-
-## Endpoints
-
-- `GET /health`
-- `POST /webhooks/recall`
-- `GET /demo/recall-sample`
-- `POST /uploads/presencial/signed-url`
-- `POST /uploads/presencial/complete`
-- `POST /demo/run`
-- `GET /meetings/{meeting_id}`
-- `GET /static/clips/{arquivo}`
-- `GET /static/frames/{arquivo}`
-
-## Como rodar
-
-```bash
-go test ./...
-go run ./cmd/demo
-```
-
-Se o ambiente bloquear cache global do Go:
+## Como validar localmente
 
 ```bash
 GOCACHE=/tmp/go-build-cache go test ./...
-```
-
-Para usar Gemini real:
-
-```bash
-export GEMINI_API_KEY="SUA_CHAVE"
-export GEMINI_MODEL="gemini-1.5-pro"
 go run ./cmd/demo
 ```
 
-## Fluxos úteis de demo
+Depois abrir:
 
-### A) Pipeline rápido (sem webhook)
-```bash
-curl -X POST http://localhost:8080/demo/run \
-  -H "Content-Type: application/json" \
-  -d '{"source":"online"}'
+```text
+http://localhost:8080/review/
 ```
 
-### B) Webhook Recall assinado (utilitário)
-```bash
-curl -s http://localhost:8080/demo/recall-sample | jq -r '.curl' | sh
-```
+## Referencias oficiais usadas
 
-Depois consulte:
-```bash
-curl http://localhost:8080/meetings/<meeting_id>
-```
+- Getting Started: https://docs.recall.ai/docs/getting-started?utm_source=Recall.ai&utm_medium=navbar&utm_content=API_Docs
+- Bot Overview: https://docs.recall.ai/docs/bot-overview
+- Media Shortcuts: https://docs.recall.ai/docs/media-shortcuts
+- Async Transcription: https://docs.recall.ai/docs/async-transcription
+- Output Media: https://docs.recall.ai/v1.10/docs/stream-media
+- List Bots reference: https://docs.recall.ai/v1.10/reference/bot_list
 
-## TODOs de produção (ainda pendentes)
+## Pontos de atencao
 
-- Trocar fila interna por Pub/Sub + Eventarc.
-- Integrar Recall real (download autenticado de mídia/transcript conforme SDK/API).
-- Integrar Azure Speech real (batch/async com diarização/biometria).
-- Migrar Gemini API key para Vertex AI com IAM/ADC.
-- Implementar FFmpeg real (`os/exec`) para gerar clips/frames reais.
-- Entrega final real: Pub/Sub `processed-meetings` ou HTTP autenticado para equipe de deals.
-
-## Observações
-
-- Esta PoC prioriza demonstrar arquitetura e contratos entre etapas.
-- Mocks foram deixados com comentários `PARTE 1/2/3` no código para facilitar manutenção.
+- A camada `/api/review/recall/*` e mockada para review; nao chama a Recall real.
+- Os links de referencia misturam docs gerais e algumas paginas `v1.10` encontradas na documentacao publica.
+- Os artefatos de media gerados no review sao escritos em `DATA_DIR/review` e servidos por `/static/review/...`.

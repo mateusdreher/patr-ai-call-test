@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recall API Review Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/review/styles.css">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Recall AI API review</p>
+        <h1>Teste a POC por fluxo, sem depender da doc externa para descobrir o que fazer.</h1>
+        <p class="lead">A interface foi organizada para criar bot, controlar gravação, configurar output media, testar calendar e inspecionar recordings e webhooks na mesma tela.</p>
+      </div>
+      <div class="hero-actions">
+        <button id="bootstrapBtn">Bootstrap demo</button>
+        <button id="refreshBtn" class="ghost">Atualizar estado</button>
+        <button id="resetBtn" class="ghost">Resetar demo</button>
+        <a id="docsLink" class="action-link ghost" target="_blank" rel="noreferrer">Abrir docs oficiais</a>
+      </div>
+    </section>
+
+    <section class="stats" id="stats"></section>
+
+    <section class="quickstart panel">
+      <div class="panel-header">
+        <div>
+          <h2>Como testar agora</h2>
+          <p>Siga essa ordem para validar a cobertura principal da Recall na review.</p>
+        </div>
+      </div>
+      <div class="steps" id="quickSteps"></div>
+    </section>
+
+    <section class="layout">
+      <aside class="sidebar">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Bots</h2>
+              <p>Selecione um bot para operar.</p>
+            </div>
+          </div>
+          <div id="bots"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Recordings</h2>
+              <p>Inspecione mídia gerada.</p>
+            </div>
+          </div>
+          <div id="recordings"></div>
+        </article>
+      </aside>
+
+      <section class="workspace">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Painel do bot selecionado</h2>
+              <p id="selectionHint">Nenhum bot selecionado.</p>
+            </div>
+          </div>
+          <div id="selectedBotPanel" class="empty-state">Selecione um bot na coluna da esquerda para habilitar ações.</div>
+        </article>
+
+        <div class="workspace-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Criar bot</h2>
+                <p>Form pronto para cenários de recorder ou AI agent.</p>
+              </div>
+            </div>
+            <form id="createBotForm" class="form-grid">
+              <label>
+                <span>Bot name</span>
+                <input name="bot_name" value="Review Bot UI">
+              </label>
+              <label>
+                <span>Meeting URL</span>
+                <input name="meeting_url" value="https://meet.google.com/ui-created-demo">
+              </label>
+              <label>
+                <span>Recording mode</span>
+                <select name="recording_mode">
+                  <option value="speaker_view">speaker_view</option>
+                  <option value="gallery_view_v2">gallery_view_v2</option>
+                </select>
+              </label>
+              <label>
+                <span>Transcription</span>
+                <select name="transcription">
+                  <option value="real_time">real_time</option>
+                  <option value="async">async</option>
+                </select>
+              </label>
+              <label>
+                <span>Metadata meeting_id</span>
+                <input name="meeting_id" value="ui-created-demo">
+              </label>
+              <label>
+                <span>Join at</span>
+                <input type="datetime-local" name="join_at">
+              </label>
+              <label class="full">
+                <span>Real time features</span>
+                <input name="real_time_features" value="captions,speaker_events">
+              </label>
+              <label class="full">
+                <span>Output media JSON opcional</span>
+                <textarea name="output_media_json" rows="6" placeholder='{"camera":{"kind":"webpage","url":"https://example.com/avatar"}}'></textarea>
+              </label>
+              <div class="form-actions full">
+                <button type="submit">Criar bot</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Calendar meeting</h2>
+                <p>Teste fluxo de agenda e refresh.</p>
+              </div>
+            </div>
+            <form id="calendarForm" class="form-grid">
+              <label>
+                <span>Platform</span>
+                <select name="platform">
+                  <option value="google_meet">google_meet</option>
+                  <option value="zoom">zoom</option>
+                </select>
+              </label>
+              <label>
+                <span>Meeting URL</span>
+                <input name="meeting_url" value="https://meet.google.com/ui-calendar-demo">
+              </label>
+              <label>
+                <span>Starts at</span>
+                <input type="datetime-local" name="starts_at">
+              </label>
+              <label>
+                <span>Calendar user</span>
+                <input name="calendar_user" value="review@demo.example">
+              </label>
+              <label class="full">
+                <span>Metadata source</span>
+                <input name="source" value="ui">
+              </label>
+              <div class="form-actions full">
+                <button type="submit">Criar calendar meeting</button>
+                <button type="button" id="refreshCalendarBtn" class="ghost">Refresh calendar</button>
+              </div>
+            </form>
+            <div id="calendar"></div>
+          </article>
+        </div>
+
+        <div class="workspace-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Webhooks de exemplo</h2>
+                <p>Clique para inspecionar payloads e usar na review.</p>
+              </div>
+            </div>
+            <div id="webhooks"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Catálogo prático</h2>
+                <p>Endpoint oficial e espelho local lado a lado.</p>
+              </div>
+            </div>
+            <div id="catalog"></div>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Console da demo</h2>
+              <p>Resposta do último endpoint acionado.</p>
+            </div>
+          </div>
+          <pre id="output">Carregando...</pre>
+        </article>
+      </section>
+    </section>
+  </main>
+
+  <script src="/review/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "events": [
+    {
+      "at_sec": 0,
+      "participant": "Mateus",
+      "type": "participant_joined"
+    },
+    {
+      "at_sec": 1,
+      "participant": "Ana",
+      "type": "participant_joined"
+    },
+    {
+      "at_sec": 2220,
+      "participant": "Ana",
+      "type": "participant_left"
+    }
+  ]
+}

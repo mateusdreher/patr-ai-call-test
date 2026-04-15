@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -132,6 +133,7 @@ func TestProcessMeetingOnline(t *testing.T) {
 		cfg:            Config{PublicBaseURL: "http://localhost:8080", DataDir: dir},
 		store:          NewStore(),
 		queue:          make(chan MeetingEvent, 1),
+		recallReview:   NewRecallReviewService(Config{PublicBaseURL: "http://localhost:8080", DataDir: dir}),
 		recallClient:   &mockRecallClient{},
 		azureClient:    &mockAzureClient{},
 		vertexClient:   &mockVertexClient{},
@@ -162,5 +164,93 @@ func TestProcessMeetingOnline(t *testing.T) {
 	}
 	if got.FinalPayload == nil {
 		t.Fatalf("expected final payload generated")
+	}
+}
+
+func TestRecallReviewLifecycle(t *testing.T) {
+	dir := t.TempDir()
+	app := &App{
+		cfg:          Config{PublicBaseURL: "http://localhost:8080", DataDir: dir},
+		recallReview: NewRecallReviewService(Config{PublicBaseURL: "http://localhost:8080", DataDir: dir}),
+	}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/review/recall/bots", strings.NewReader(`{
+		"bot_name":"Lifecycle Bot",
+		"meeting_url":"https://meet.google.com/lifecycle-demo",
+		"recording_mode":"speaker_view",
+		"transcription":"real_time"
+	}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRR := httptest.NewRecorder()
+	app.recallBotsHandler(createRR, createReq)
+	if createRR.Code != http.StatusCreated {
+		t.Fatalf("unexpected create status=%d body=%s", createRR.Code, createRR.Body.String())
+	}
+
+	var created RecallReviewBot
+	if err := json.Unmarshal(createRR.Body.Bytes(), &created); err != nil {
+		t.Fatalf("failed to parse bot: %v", err)
+	}
+
+	startRR := httptest.NewRecorder()
+	startReq := httptest.NewRequest(http.MethodPost, "/api/review/recall/bots/"+created.ID+"/start_recording", nil)
+	app.recallBotByIDHandler(startRR, startReq)
+	if startRR.Code != http.StatusCreated {
+		t.Fatalf("unexpected start status=%d body=%s", startRR.Code, startRR.Body.String())
+	}
+
+	var recording RecallReviewRecording
+	if err := json.Unmarshal(startRR.Body.Bytes(), &recording); err != nil {
+		t.Fatalf("failed to parse recording: %v", err)
+	}
+
+	stopRR := httptest.NewRecorder()
+	stopReq := httptest.NewRequest(http.MethodPost, "/api/review/recall/bots/"+created.ID+"/stop_recording", nil)
+	app.recallBotByIDHandler(stopRR, stopReq)
+	if stopRR.Code != http.StatusOK {
+		t.Fatalf("unexpected stop status=%d body=%s", stopRR.Code, stopRR.Body.String())
+	}
+
+	getRR := httptest.NewRecorder()
+	getReq := httptest.NewRequest(http.MethodGet, "/api/review/recall/recordings/"+recording.ID, nil)
+	app.recallRecordingByIDHandler(getRR, getReq)
+	if getRR.Code != http.StatusOK {
+		t.Fatalf("unexpected retrieve status=%d body=%s", getRR.Code, getRR.Body.String())
+	}
+
+	var stopped RecallReviewRecording
+	if err := json.Unmarshal(getRR.Body.Bytes(), &stopped); err != nil {
+		t.Fatalf("failed to parse stopped recording: %v", err)
+	}
+	if stopped.Status != "completed" {
+		t.Fatalf("expected completed recording, got %s", stopped.Status)
+	}
+	if stopped.MediaShortcuts["transcript"].ID == "" || stopped.MediaShortcuts["video_mixed"].ID == "" {
+		t.Fatalf("expected media shortcuts generated: %+v", stopped.MediaShortcuts)
+	}
+}
+
+func TestRecallCatalogHandler(t *testing.T) {
+	dir := t.TempDir()
+	app := &App{
+		cfg:          Config{PublicBaseURL: "http://localhost:8080", DataDir: dir},
+		recallReview: NewRecallReviewService(Config{PublicBaseURL: "http://localhost:8080", DataDir: dir}),
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/review/recall/catalog", nil)
+	app.recallCatalogHandler(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	var resp struct {
+		Endpoints []RecallEndpointDoc `json:"endpoints"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse catalog: %v", err)
+	}
+	if len(resp.Endpoints) < 10 {
+		t.Fatalf("expected broad recall catalog, got %d endpoints", len(resp.Endpoints))
 	}
 }

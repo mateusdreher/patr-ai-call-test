@@ -1,0 +1,14 @@
+{
+  "duration_sec": 2220,
+  "participants": [
+    {
+      "name": "Mateus",
+      "role": "host"
+    },
+    {
+      "name": "Ana",
+      "role": "guest"
+    }
+  ],
+  "platform": "google_meet"
+}

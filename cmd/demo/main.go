@@ -36,6 +36,7 @@ type App struct {
 	cfg            Config
 	store          *Store
 	queue          chan MeetingEvent
+	recallReview   *RecallReviewService
 	recallClient   RecallClient
 	azureClient    AzureClient
 	vertexClient   VertexClient
@@ -445,6 +446,7 @@ func main() {
 		cfg:            cfg,
 		store:          NewStore(),
 		queue:          make(chan MeetingEvent, 128),
+		recallReview:   NewRecallReviewService(cfg),
 		recallClient:   &mockRecallClient{},
 		azureClient:    &mockAzureClient{},
 		vertexClient:   vertexClient,
@@ -492,6 +494,24 @@ func (a *App) routes() {
 	http.HandleFunc("/uploads/presencial/complete", a.presencialUploadCompleteHandler)
 	http.HandleFunc("/demo/run", a.demoRunHandler)
 	http.HandleFunc("/meetings/", a.getMeetingHandler)
+	http.HandleFunc("/api/review/recall/catalog", a.recallCatalogHandler)
+	http.HandleFunc("/api/review/recall/state", a.recallStateHandler)
+	http.HandleFunc("/api/review/recall/reset", a.recallResetHandler)
+	http.HandleFunc("/api/review/recall/bootstrap", a.recallBootstrapHandler)
+	http.HandleFunc("/api/review/recall/webhooks/samples", a.recallWebhookSamplesHandler)
+	http.HandleFunc("/api/review/recall/bots", a.recallBotsHandler)
+	http.HandleFunc("/api/review/recall/bots/", a.recallBotByIDHandler)
+	http.HandleFunc("/api/review/recall/recordings", a.recallRecordingsHandler)
+	http.HandleFunc("/api/review/recall/recordings/", a.recallRecordingByIDHandler)
+	http.HandleFunc("/api/review/recall/transcripts/", a.recallTranscriptHandler)
+	http.HandleFunc("/api/review/recall/video_mixed/", a.recallVideoMixedHandler)
+	http.HandleFunc("/api/review/recall/audio_mixed/", a.recallAudioMixedHandler)
+	http.HandleFunc("/api/review/recall/meeting_metadata/", a.recallMeetingMetadataHandler)
+	http.HandleFunc("/api/review/recall/participant_events/", a.recallParticipantEventsHandler)
+	http.HandleFunc("/api/review/recall/calendar/meetings/refresh", a.recallCalendarRefreshHandler)
+	http.HandleFunc("/api/review/recall/calendar/meetings", a.recallCalendarMeetingsHandler)
+	http.HandleFunc("/api/review/recall/calendar/meetings/", a.recallCalendarMeetingByIDHandler)
+	http.Handle("/review/", http.StripPrefix("/review/", http.FileServer(http.Dir("./web"))))
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(a.cfg.DataDir))))
 }
 
