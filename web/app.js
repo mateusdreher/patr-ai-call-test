@@ -1,6 +1,5 @@
 const output = document.getElementById("output");
 const statsEl = document.getElementById("stats");
-const catalogEl = document.getElementById("catalog");
 const botsEl = document.getElementById("bots");
 const recordingsEl = document.getElementById("recordings");
 const calendarEl = document.getElementById("calendar");
@@ -85,67 +84,34 @@ function renderStats(summary) {
 
 function renderQuickSteps() {
   const steps = [
-    "1. Rode Bootstrap demo para carregar bots, recordings e agenda inicial.",
-    "2. Selecione um bot na coluna da esquerda para habilitar as ações dele.",
-    "3. Use Start, Pause, Resume, Stop e Leave para validar o ciclo completo de gravação.",
-    "4. Abra os media shortcuts do recording para inspecionar transcript, vídeo, áudio, metadata e participant events.",
-    "5. Crie um bot novo ou um calendar meeting pelo formulário para testar criação manual.",
-    "6. Se quiser revisar o contrato, use o catálogo prático com endpoint oficial e espelho local."
+    "1. Rode Bootstrap para carregar uma agenda dedicada, um bot futuro e uma gravação finalizada.",
+    "2. Na agenda, confirme o evento e o calendar user conectado.",
+    "3. Selecione um bot e valide o lifecycle com Start, Stop e Leave.",
+    "4. Abra os artefatos do recording e revise transcript, audio, metadata e participant events.",
+    "5. Em meeting metadata, confira nomes, emails derivados via agenda e casos sem match."
   ];
 
   quickSteps.innerHTML = steps.map((step) => `<div class="step">${step}</div>`).join("");
 }
 
-function renderCatalog(endpoints) {
-  catalogEl.innerHTML = `<div class="stack compact">${
-    endpoints.map((endpoint) => `
-      <div class="item endpoint">
-        <div class="meta">
-          ${chip(endpoint.category)}
-          ${chip(endpoint.resource, "warn")}
-        </div>
-        <h3>${endpoint.name}</h3>
-        <p>${endpoint.description}</p>
-        <div class="small">Official: ${endpoint.official}</div>
-        <div class="small">Local: ${endpoint.local}</div>
-        <div class="actions">
-          <button class="ghost small-btn" data-local-endpoint="${endpoint.local}">Testar local</button>
-          <a class="action-link ghost small-btn" href="${endpoint.docs_url}" target="_blank" rel="noreferrer">Doc</a>
-        </div>
+function renderBots(bots) {
+  botsEl.innerHTML = `${
+    bots.map((bot) => `
+      <div class="row ${bot.id === selectedBotID ? "selected" : ""}">
+        <button class="row-trigger" data-select-bot="${bot.id}">
+          <div class="meta">
+            ${chip(bot.status)}
+            ${chip(bot.recording_mode)}
+          </div>
+          <div class="row-main">
+            <strong>${bot.bot_name}</strong>
+            <span class="small">${bot.id}</span>
+          </div>
+          <p>${bot.meeting_url || "Sem meeting_url"}</p>
+        </button>
       </div>
     `).join("")
-  }</div>`;
-
-  catalogEl.querySelectorAll("[data-local-endpoint]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const local = button.dataset.localEndpoint;
-      if (!local.startsWith("GET ")) {
-        output.textContent = `Use os formulários e ações da tela para testar ${local}.`;
-        return;
-      }
-      const path = local.replace("GET ", "");
-      await api(path);
-    });
-  });
-}
-
-function renderBots(bots) {
-  botsEl.innerHTML = `<div class="stack">${
-    bots.map((bot) => `
-      <button class="item bot-card ${bot.id === selectedBotID ? "selected" : ""}" data-select-bot="${bot.id}">
-        <div class="meta">
-          ${chip(bot.status)}
-          ${chip(bot.recording_mode)}
-        </div>
-        <h3>${bot.bot_name}</h3>
-        <p>${bot.meeting_url || "Sem meeting_url"}</p>
-        <div class="small">ID: ${bot.id}</div>
-        <div class="list-inline">
-          ${(bot.real_time_features || []).map((feature) => chip(feature, "soft")).join("")}
-        </div>
-      </button>
-    `).join("")
-  }</div>`;
+  }`;
 
   botsEl.querySelectorAll("[data-select-bot]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -194,9 +160,9 @@ function renderSelectedBotPanel() {
       </div>
     </div>
 
-    <div class="workspace-grid">
+    <div class="split">
       <form id="updateBotForm" class="form-grid">
-        <h4>Editar bot</h4>
+        <h4>Bot</h4>
         <label>
           <span>Bot name</span>
           <input name="bot_name" value="${bot.bot_name}">
@@ -222,24 +188,26 @@ function renderSelectedBotPanel() {
         </div>
       </form>
 
-      <form id="outputMediaForm" class="form-grid">
-        <h4>Output media</h4>
-        <label class="full">
-          <span>JSON de output_media</span>
-          <textarea name="output_media_json" rows="8" placeholder='{"camera":{"kind":"webpage","url":"https://example.com/avatar"}}'>${outputMediaValue}</textarea>
-        </label>
-        <div class="form-actions full">
-          <button type="submit">Salvar output media</button>
-          <button type="button" id="clearOutputMediaBtn" class="ghost">Remover output media</button>
-        </div>
-      </form>
+      <details class="advanced">
+        <summary>Output media</summary>
+        <form id="outputMediaForm" class="form-grid">
+          <label class="full">
+            <span>JSON de output_media</span>
+            <textarea name="output_media_json" rows="8" placeholder='{"camera":{"kind":"webpage","url":"https://example.com/avatar"}}'>${outputMediaValue}</textarea>
+          </label>
+          <div class="form-actions full">
+            <button type="submit">Salvar output media</button>
+            <button type="button" id="clearOutputMediaBtn" class="ghost">Remover output media</button>
+          </div>
+        </form>
+      </details>
     </div>
 
-    <div class="item embedded">
+    <div class="embedded">
       <h4>Recordings do bot</h4>
-      <div class="stack compact">
+      <div class="list">
         ${recordings.length ? recordings.map((recording) => `
-          <div class="item inline-card">
+          <div class="row inline-card">
             <div>
               <div class="meta">
                 ${chip(recording.status)}
@@ -331,9 +299,9 @@ function renderSelectedBotPanel() {
 }
 
 function renderRecordings(recordings) {
-  recordingsEl.innerHTML = `<div class="stack compact">${
+  recordingsEl.innerHTML = `${
     recordings.map((recording) => `
-      <div class="item">
+      <div class="row">
         <div class="meta">
           ${chip(recording.status)}
           ${chip(`${recording.duration_sec}s`, "warn")}
@@ -348,7 +316,7 @@ function renderRecordings(recordings) {
         </div>
       </div>
     `).join("")
-  }</div>`;
+  }`;
 
   recordingsEl.querySelectorAll("[data-recording-id]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -365,9 +333,9 @@ function renderRecordings(recordings) {
 }
 
 function renderCalendar(meetings) {
-  calendarEl.innerHTML = `<div class="stack compact">${
+  calendarEl.innerHTML = `${
     meetings.map((meeting) => `
-      <div class="item">
+      <div class="row">
         <div class="meta">
           ${chip(meeting.platform)}
           ${chip(meeting.recording_state, "warn")}
@@ -380,7 +348,7 @@ function renderCalendar(meetings) {
         </div>
       </div>
     `).join("")
-  }</div>`;
+  }`;
 
   calendarEl.querySelectorAll("[data-calendar-id]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -390,9 +358,9 @@ function renderCalendar(meetings) {
 }
 
 function renderWebhooks(samples) {
-  webhooksEl.innerHTML = `<div class="stack compact">${
+  webhooksEl.innerHTML = `${
     samples.map((sample, index) => `
-      <div class="item">
+      <div class="row">
         <div class="meta">${chip(sample.event)}</div>
         <h3>${sample.description}</h3>
         <div class="actions">
@@ -400,7 +368,7 @@ function renderWebhooks(samples) {
         </div>
       </div>
     `).join("")
-  }</div>`;
+  }`;
 
   webhooksEl.querySelectorAll("[data-webhook-index]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -408,11 +376,6 @@ function renderWebhooks(samples) {
       output.textContent = JSON.stringify(sample, null, 2);
     });
   });
-}
-
-async function loadCatalog() {
-  const data = await api("/api/review/recall/catalog");
-  renderCatalog(data.endpoints || []);
 }
 
 async function loadState() {
@@ -496,6 +459,6 @@ document.getElementById("refreshCalendarBtn").addEventListener("click", async ()
 const calendarDateInput = document.querySelector('#calendarForm [name="starts_at"]');
 calendarDateInput.value = toDateTimeLocal(new Date(Date.now() + 90 * 60 * 1000));
 
-Promise.all([loadCatalog(), loadState()]).catch((error) => {
+loadState().catch((error) => {
   output.textContent = error.message;
 });

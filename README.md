@@ -19,6 +19,7 @@ Entradas principais:
 - Review UI: `http://localhost:8080/review/`
 - Health: `http://localhost:8080/health`
 - Pipeline demo: `http://localhost:8080/demo/run`
+- Documento da apresentacao: `docs/recall-poc-apresentacao.md`
 
 ## O que esta POC cobre da Recall
 
@@ -31,6 +32,9 @@ Com base na documentacao oficial da Recall, a POC agora demonstra localmente:
 - configuracao de `output_media` para cenarios de AI agents;
 - reunioes de calendario para auto-join;
 - exemplos de webhooks como `bot.joined`, `recording.started`, `recording.done` e `bot.left`.
+- agenda dedicada / fluxo de calendar scheduling para auto-join;
+- identidade de participantes com destaque para a limitacao de email derivado via calendar match;
+- pontos de governanca como cancelamento de bot agendado, leave call e delecao de media.
 
 Referencias oficiais usadas para estruturar essa camada:
 
@@ -54,11 +58,29 @@ O front simples em `HTML + CSS + JS` esta em `web/` e consome:
 Na tela de review voce consegue:
 
 - ver o catalogo de endpoints com link para a doc oficial;
+- ver os endpoints classificados por prioridade para a POC;
 - criar bot e calendar meeting pela UI;
 - executar `start/pause/resume/stop/leave` em bots;
 - inspecionar recordings e media shortcuts gerados;
+- validar metadata de participantes com nomes, emails derivados e casos `null`;
 - abrir exemplos de payload de webhook;
 - apresentar o mapeamento entre endpoint oficial e endpoint local da demo.
+
+## Endpoints prioritarios para esta POC
+
+Fluxo recomendado para validar o caso de uso:
+
+1. `POST /api/review/recall/calendar/meetings`
+2. `POST /api/review/recall/bots`
+3. `POST /api/review/recall/bots/{bot_id}/start_recording`
+4. `POST /api/review/recall/bots/{bot_id}/stop_recording`
+5. `GET /api/review/recall/recordings/{recording_id}`
+6. `GET /api/review/recall/transcripts/{transcript_id}`
+7. `GET /api/review/recall/meeting_metadata/{metadata_id}`
+8. `GET /api/review/recall/participant_events/{event_id}`
+9. `DELETE /api/review/recall/recordings/{recording_id}`
+
+Resumo conceitual da POC em [docs/recall-poc-apresentacao.md](docs/recall-poc-apresentacao.md).
 
 ## Endpoints do pipeline original
 

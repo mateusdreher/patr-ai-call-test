@@ -1,0 +1,28 @@
+{
+  "events": [
+    {
+      "at_sec": 0,
+      "participant": "Mateus Dreher",
+      "participant_id": 1,
+      "type": "participant_joined"
+    },
+    {
+      "at_sec": 1,
+      "participant": "Ana Silva",
+      "participant_id": 2,
+      "type": "participant_joined"
+    },
+    {
+      "at_sec": 44,
+      "participant": "Guest Mobile",
+      "participant_id": 3,
+      "type": "participant_joined"
+    },
+    {
+      "at_sec": 6,
+      "participant": "Ana Silva",
+      "participant_id": 2,
+      "type": "participant_left"
+    }
+  ]
+}

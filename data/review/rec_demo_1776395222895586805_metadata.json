@@ -1,0 +1,36 @@
+{
+  "calendar_context": {
+    "calendar_user": "recall-poc@demo.example",
+    "identity_resolution": "fuzzy_match_between_invitees_and_in_call_participants",
+    "recording_via": "calendar_integration_v2"
+  },
+  "duration_sec": 6,
+  "notes": [
+    "Participant emails nao sao expostos diretamente pelo provedor da call.",
+    "Na Recall, o email pode ser preenchido por matching com o calendario quando essa feature estiver habilitada."
+  ],
+  "participants": [
+    {
+      "email": "mateus@demo.example",
+      "email_source": "calendar_match",
+      "name": "Mateus Dreher",
+      "participant_id": 1,
+      "role": "host"
+    },
+    {
+      "email": "ana@demo.example",
+      "email_source": "calendar_match",
+      "name": "Ana Silva",
+      "participant_id": 2,
+      "role": "guest"
+    },
+    {
+      "email": null,
+      "email_source": "unmatched",
+      "name": "Guest Mobile",
+      "participant_id": 3,
+      "role": "guest"
+    }
+  ],
+  "platform": "google_meet"
+}
